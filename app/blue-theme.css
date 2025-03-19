@@ -1,0 +1,86 @@
+/* Blue theme variables */
+:root {
+  --blue-primary: #1e88e5;
+  --blue-dark: #1565c0;
+  --blue-light: #64b5f6;
+  --blue-bg: #e3f2fd;
+
+  /* Text colors */
+  --text-primary: #333333;
+  --text-secondary: #555555;
+  --text-muted: #717171;
+}
+
+/* Basic element styling */
+body {
+  color: var(--text-primary);
+  background-color: white;
+}
+
+/* Only make headings blue, not all text */
+h1,
+h2,
+h3 {
+  color: var(--blue-primary);
+}
+
+h4,
+h5,
+h6 {
+  color: var(--text-primary);
+}
+
+p,
+span {
+  color: var(--text-primary);
+}
+
+/* Links should be blue */
+a {
+  color: var(--blue-primary);
+}
+
+/* Component styling */
+.blue-gradient {
+  background: linear-gradient(to right, var(--blue-primary), var(--blue-light));
+  color: white;
+}
+
+.blue-header {
+  background: linear-gradient(to right, var(--blue-primary), var(--blue-dark));
+  color: white;
+}
+
+.blue-card {
+  border-radius: 16px;
+  border: 1px solid rgba(30, 136, 229, 0.1);
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.05);
+}
+
+.blue-button {
+  background: linear-gradient(to right, var(--blue-primary), var(--blue-light));
+  color: white;
+  border-radius: 9999px;
+}
+
+.blue-progress-bg {
+  background-color: rgba(30, 136, 229, 0.1);
+}
+
+.blue-progress-indicator {
+  background: linear-gradient(to right, var(--blue-primary), var(--blue-light));
+}
+
+/* Card styling */
+.card-title {
+  color: var(--blue-primary);
+}
+
+.card-description {
+  color: var(--text-secondary);
+}
+
+.card-content {
+  color: var(--text-primary);
+}
+
