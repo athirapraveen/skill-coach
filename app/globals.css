@@ -1,0 +1,246 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@layer base {
+  :root {
+    --background: 0 0% 100%;
+    --foreground: 222.2 84% 4.9%;
+
+    --card: 0 0% 100%;
+    --card-foreground: 222.2 84% 4.9%;
+
+    --popover: 0 0% 100%;
+    --popover-foreground: 222.2 84% 4.9%;
+
+    --primary: 221.2 83.2% 53.3%;
+    --primary-foreground: 210 40% 98%;
+
+    --secondary: 210 40% 96.1%;
+    --secondary-foreground: 222.2 47.4% 11.2%;
+
+    --muted: 210 40% 96.1%;
+    --muted-foreground: 215.4 16.3% 46.9%;
+
+    --accent: 210 40% 96.1%;
+    --accent-foreground: 222.2 47.4% 11.2%;
+
+    --destructive: 0 84.2% 60.2%;
+    --destructive-foreground: 210 40% 98%;
+
+    --border: 214.3 31.8% 91.4%;
+    --input: 214.3 31.8% 91.4%;
+    --ring: 221.2 83.2% 53.3%;
+
+    --radius: 0.5rem;
+  }
+
+  .dark {
+    --background: 222.2 84% 4.9%;
+    --foreground: 210 40% 98%;
+
+    --card: 222.2 84% 4.9%;
+    --card-foreground: 210 40% 98%;
+
+    --popover: 222.2 84% 4.9%;
+    --popover-foreground: 210 40% 98%;
+
+    --primary: 217.2 91.2% 59.8%;
+    --primary-foreground: 222.2 47.4% 11.2%;
+
+    --secondary: 217.2 32.6% 17.5%;
+    --secondary-foreground: 210 40% 98%;
+
+    --muted: 217.2 32.6% 17.5%;
+    --muted-foreground: 215 20.2% 65.1%;
+
+    --accent: 217.2 32.6% 17.5%;
+    --accent-foreground: 210 40% 98%;
+
+    --destructive: 0 62.8% 30.6%;
+    --destructive-foreground: 210 40% 98%;
+
+    --border: 217.2 32.6% 17.5%;
+    --input: 217.2 32.6% 17.5%;
+    --ring: 224.3 76.5% 48%;
+  }
+}
+
+@layer base {
+  * {
+    @apply border-border;
+  }
+  body {
+    @apply bg-background text-foreground;
+    font-feature-settings: "rlig" 1, "calt" 1;
+  }
+  h1,
+  h2,
+  h3 {
+    @apply font-medium tracking-tight text-primary;
+  }
+  h4,
+  h5,
+  h6 {
+    @apply font-medium tracking-tight text-foreground;
+  }
+  p {
+    @apply text-foreground;
+  }
+}
+
+/* Custom styles for the learning platform */
+@layer components {
+  .topic-card {
+    @apply transition-all duration-300 hover:shadow-md hover:border-primary/30;
+  }
+
+  .topic-card.completed {
+    @apply border-l-4 border-l-primary;
+  }
+
+  .topic-card.in-progress {
+    @apply border-l-4 border-l-primary;
+  }
+
+  .resource-card {
+    @apply transition-all duration-300 hover:shadow-md hover:border-primary/30;
+  }
+
+  .resource-card.completed {
+    @apply bg-primary/10;
+  }
+
+  .progress-indicator {
+    @apply relative h-2 w-full overflow-hidden rounded-full bg-secondary;
+  }
+
+  .progress-indicator-value {
+    @apply absolute left-0 top-0 h-full bg-primary transition-all duration-300;
+  }
+
+  .roadmap-connector {
+    @apply absolute left-1/2 top-0 bottom-0 w-0.5 bg-gray-200 -translate-x-1/2 z-0;
+  }
+
+  .roadmap-connector::before {
+    content: "";
+    @apply absolute top-0 left-1/2 -translate-x-1/2 w-3 h-3 rounded-full bg-gray-200;
+  }
+
+  .roadmap-connector::after {
+    content: "";
+    @apply absolute bottom-0 left-1/2 -translate-x-1/2 w-3 h-3 rounded-full bg-gray-200;
+  }
+
+  .roadmap-node {
+    @apply absolute left-1/2 -translate-x-1/2 -translate-y-1/2 top-0 w-8 h-8 rounded-full flex items-center justify-center z-20 bg-background border-2 border-primary shadow-md;
+  }
+
+  .roadmap-node-inner {
+    @apply w-4 h-4 rounded-full transition-all duration-300;
+  }
+
+  .roadmap-node-inner.completed {
+    @apply bg-primary;
+  }
+
+  .roadmap-node-inner.incomplete {
+    @apply bg-primary/20;
+  }
+
+  .lesson-plan-week {
+    @apply border-l-4 border-l-primary/20 pl-4 py-2 mb-6;
+  }
+
+  .lesson-plan-topic {
+    @apply border-l-2 border-l-primary/10 pl-4 py-2 mb-4;
+  }
+
+  .quiz-badge {
+    @apply ml-2 inline-flex items-center justify-center w-5 h-5 text-xs font-bold text-white bg-primary rounded-full;
+  }
+
+  .highlight-effect {
+    @apply ring-2 ring-primary ring-offset-2 transition-all duration-300;
+  }
+
+  /* Interactive elements */
+  .interactive-card {
+    @apply transition-all duration-300 rounded-xl shadow-md hover:shadow-lg border border-primary/10 hover:border-primary/30;
+  }
+
+  .interactive-button {
+    @apply rounded-full shadow-md hover:shadow-lg transition-all duration-300 bg-gradient-to-r from-primary to-primary/80 hover:from-primary/90 hover:to-primary;
+  }
+
+  .interactive-icon {
+    @apply bg-gradient-to-r from-primary to-primary/80 text-white rounded-full p-2 shadow-md;
+  }
+
+  /* Blue-themed text */
+  .text-blue-themed {
+    @apply text-primary;
+  }
+
+  .text-blue-themed-muted {
+    @apply text-primary/70;
+  }
+
+  /* Card styling */
+  .blue-card {
+    @apply bg-white border border-primary/10 rounded-xl shadow-md hover:shadow-lg transition-all duration-300;
+  }
+
+  .blue-card-header {
+    @apply bg-primary/5 border-b border-primary/10 p-4 rounded-t-xl;
+  }
+
+  .blue-card-content {
+    @apply p-4;
+  }
+
+  /* Button styling */
+  .blue-button {
+    @apply bg-gradient-to-r from-primary to-primary/80 text-white rounded-full shadow-md hover:shadow-lg hover:from-primary hover:to-primary/90 transition-all duration-300;
+  }
+
+  .blue-button-outline {
+    @apply border border-primary/30 text-primary rounded-full shadow-sm hover:shadow-md hover:bg-primary/5 transition-all duration-300;
+  }
+}
+
+/* Animation for progress bars */
+@keyframes progress-animation {
+  0% {
+    transform: translateX(-100%);
+  }
+  100% {
+    transform: translateX(0);
+  }
+}
+
+.animate-progress {
+  animation: progress-animation 1s ease-out forwards;
+}
+
+/* Custom scrollbar */
+::-webkit-scrollbar {
+  width: 8px;
+  height: 8px;
+}
+
+::-webkit-scrollbar-track {
+  background-color: rgba(30, 136, 229, 0.1);
+  border-radius: 9999px;
+}
+
+::-webkit-scrollbar-thumb {
+  background-color: rgba(30, 136, 229, 0.3);
+  border-radius: 9999px;
+}
+
+::-webkit-scrollbar-thumb:hover {
+  background-color: rgba(30, 136, 229, 0.5);
+}
+

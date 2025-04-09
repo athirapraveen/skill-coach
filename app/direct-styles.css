@@ -1,0 +1,67 @@
+/* Direct styles without Tailwind processing */
+body {
+  color: #1565c0;
+  background-color: white;
+}
+
+h1,
+h2,
+h3,
+h4,
+h5,
+h6 {
+  color: #1e88e5;
+}
+
+p,
+span,
+div {
+  color: #1565c0;
+}
+
+a {
+  color: #1e88e5;
+}
+
+button {
+  background: linear-gradient(to right, #1e88e5, #64b5f6);
+  color: white;
+  border-radius: 9999px;
+}
+
+.card {
+  border-radius: 16px;
+  border: 1px solid rgba(30, 136, 229, 0.1);
+}
+
+header {
+  background: linear-gradient(to right, #1e88e5, #1565c0);
+  color: white;
+}
+
+header a,
+header button,
+header span {
+  color: white;
+}
+
+.text-muted {
+  color: rgba(21, 101, 192, 0.7);
+}
+
+.bg-blue-gradient {
+  background: linear-gradient(to right, #1e88e5, #64b5f6);
+}
+
+.rounded-full {
+  border-radius: 9999px;
+}
+
+.shadow-blue {
+  box-shadow: 0 4px 6px rgba(30, 136, 229, 0.1);
+}
+
+.border-blue {
+  border: 1px solid rgba(30, 136, 229, 0.2);
+}
+
