@@ -325,6 +325,45 @@ function extractUrlsFromContent(content: string): string[] {
   return urls;
 }
 
+// Add this helper function to validate a single resource URL
+async function validateResourceUrl(url: string): Promise<boolean> {
+  try {
+    const response = await fetch('/api/validate-url', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({ url }),
+    });
+
+    if (!response.ok) {
+      return false;
+    }
+
+    const result = await response.json();
+    return result.isValid;
+  } catch (error) {
+    console.error('Error validating URL:', error);
+    return false;
+  }
+}
+
+// Add this helper function to validate multiple resource URLs
+async function validateResourceUrls(resources: Resource[]): Promise<Resource[]> {
+  const validatedResources: Resource[] = [];
+  
+  for (const resource of resources) {
+    const isValid = await validateResourceUrl(resource.url);
+    if (isValid) {
+      validatedResources.push(resource);
+    } else {
+      console.log(`Invalid fallback resource URL: ${resource.url}`);
+    }
+  }
+  
+  return validatedResources;
+}
+
 export default function RoadmapDetailPage() {
   const params = useParams();
   const router = useRouter();
@@ -1194,7 +1233,7 @@ export default function RoadmapDetailPage() {
           console.log(`No valid resources found for topic: ${title}. Adding fallback resources.`);
           
           // Create fallback resources based on the topic title and description
-          const fallbackResources = generateFallbackResources(title, description);
+          const fallbackResources = await generateFallbackResources(title, description, objectivesContent);
           
           // Add these resources to our topic
           topicResources.push(...fallbackResources.map(resource => ({
@@ -1231,61 +1270,238 @@ export default function RoadmapDetailPage() {
     }
   };
 
-  // Helper function to generate fallback resources when no valid resources are available
-  function generateFallbackResources(topicTitle: string, topicDescription: string): {
-    title: string;
-    description: string;
-    url: string;
-    format: string;
-    type: string;
-    isFree: boolean;
-  }[] {
-    const fallbackResources = [];
+  // Update the generateFallbackResources function to return AI-generated resources if there's at least one valid resource, and fill remaining slots with basic fallbacks
+  async function generateFallbackResources(topicTitle: string, topicDescription: string, objectives?: string): Promise<Resource[]> {
+    const MAX_ATTEMPTS = 3; // Maximum number of attempts to generate valid resources
+    let attempts = 0;
     
-    // Create a search-friendly query string from topic title and description
-    const searchQuery = encodeURIComponent(`${topicTitle} tutorial`);
-    
-    // First resource - YouTube video search
-    fallbackResources.push({
-      title: `YouTube Tutorials on ${topicTitle}`,
-      description: `Curated videos about ${topicTitle}`,
-      url: `https://www.youtube.com/results?search_query=${searchQuery}`,
-      format: 'video',
-      type: 'tutorial',
-      isFree: true
-    });
-    
-    // Second resource - MDN or documentation
-    fallbackResources.push({
-      title: `Documentation for ${topicTitle}`,
-      description: `Official or community documentation resources`,
-      url: `https://developer.mozilla.org/en-US/search?q=${searchQuery}`,
-      format: 'article',
-      type: 'reference',
-      isFree: true
-    });
-    
-    // Third resource - GitHub
-    fallbackResources.push({
-      title: `${topicTitle} Projects on GitHub`,
-      description: `Open source projects and examples`,
-      url: `https://github.com/search?q=${searchQuery}&type=repositories`,
-      format: 'interactive',
-      type: 'project',
-      isFree: true
-    });
-    
-    // Fourth resource - Coursera or edX
-    fallbackResources.push({
-      title: `Online Courses on ${topicTitle}`,
-      description: `Learn ${topicTitle} through structured courses`,
-      url: `https://www.coursera.org/search?query=${searchQuery}`,
-      format: 'course',
-      type: 'course',
-      isFree: false
-    });
-    
-    return fallbackResources;
+    while (attempts < MAX_ATTEMPTS) {
+      try {
+        attempts++;
+        console.log(`Attempt ${attempts} to generate fallback resources for topic: ${topicTitle}`);
+        
+        // Create a detailed prompt for GPT-4o with objectives context
+        const prompt = `Generate 4 high-quality learning resources for the topic: "${topicTitle}"
+Description: ${topicDescription}
+${objectives ? `Learning Objectives:\n${objectives}` : ''}
+
+Requirements for each resource:
+1. Must be from reputable platforms (YouTube, Coursera, Udemy, official documentation, GitHub)
+2. Must include a valid URL
+3. Must be relevant to the topic AND learning objectives
+4. Must be recent (within last 2 years)
+5. Must be in English
+6. Must be free or have a free tier
+
+Format each resource EXACTLY as shown in the example (no markdown, no extra formatting):
+Title - URL - Type
+
+Example:
+Advanced React Patterns - https://www.youtube.com/watch?v=example - tutorial
+React Official Documentation - https://reactjs.org/docs/advanced - reference
+`;
+
+        // Call the API to generate resources
+        const response = await fetch('/api/generate-resources', {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+          },
+          body: JSON.stringify({
+            prompt,
+            topicTitle,
+            topicDescription,
+            objectives,
+          }),
+        });
+
+        if (!response.ok) {
+          throw new Error('Failed to generate resources');
+        }
+
+        const { resources } = await response.json();
+
+        // Parse and validate the generated resources
+        const parsedResources = resources.map((resource: string) => {
+          // Clean the resource string - remove any markdown or extra formatting
+          const cleanResource = resource.replace(/\[|\]|\(|\)/g, '').trim();
+          
+          // Split by the last two occurrences of " - " to handle titles that might contain dashes
+          const parts = cleanResource.split(' - ');
+          
+          // Handle different formats
+          let title, url, type;
+          
+          if (parts.length === 3) {
+            // Standard format: "Title - URL - Type"
+            [title, url, type] = parts.map(s => s.trim());
+          } else if (parts.length === 4) {
+            // Format with description: "Title - Description - URL - Type"
+            [title, , url, type] = parts.map(s => s.trim());
+          } else {
+            console.error('Invalid resource format:', cleanResource);
+            throw new Error(`Invalid resource format: ${cleanResource}`);
+          }
+          
+          // Validate URL format
+          if (!url || !url.startsWith('http')) {
+            console.error('Invalid URL format in resource:', url);
+            throw new Error(`Invalid URL format in resource: ${url}`);
+          }
+
+          // Map the type to valid resource types
+          let resourceType: 'tutorial' | 'reference' | 'project' | 'course' | 'other';
+          switch (type.toLowerCase()) {
+            case 'video':
+              resourceType = 'tutorial';
+              break;
+            case 'documentation':
+              resourceType = 'reference';
+              break;
+            case 'project':
+              resourceType = 'project';
+              break;
+            case 'course':
+              resourceType = 'course';
+              break;
+            default:
+              resourceType = 'other';
+          }
+
+          return {
+            id: generateUUID(),
+            title,
+            url,
+            type: resourceType,
+            format: resourceType === 'tutorial' ? 'video' : 'article',
+            isFree: true,
+            topicId: 'fallback',
+            description: `Generated resource for ${topicTitle}`,
+          };
+        });
+
+        // Validate we have the expected number of resources
+        if (parsedResources.length !== 4) {
+          console.warn(`Expected 4 resources, but got ${parsedResources.length} for topic: ${topicTitle}`);
+          throw new Error(`Expected 4 resources, but got ${parsedResources.length}`);
+        }
+
+        // Use the resource-validator endpoint to validate all resources at once
+        const validationResponse = await fetch('/api/resource-validator', {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+          },
+          body: JSON.stringify({
+            resources: parsedResources.map((resource: Resource) => ({
+              id: resource.id,
+              url: resource.url,
+              title: resource.title,
+              description: resource.description,
+              type: resource.type,
+              format: resource.format,
+              isFree: resource.isFree,
+              topicId: resource.topicId
+            }))
+          }),
+        });
+
+        if (!validationResponse.ok) {
+          throw new Error('Failed to validate resources');
+        }
+
+        const validationResult = await validationResponse.json();
+        
+        // Check if validationResult has the expected structure
+        if (!validationResult || !validationResult.results || !Array.isArray(validationResult.results)) {
+          console.error('Invalid validation response structure:', validationResult);
+          throw new Error('Invalid validation response structure');
+        }
+
+        // Map the validation results to our resources
+        const validatedResources = parsedResources.map((resource: Resource, index: number) => {
+          const resultItem = validationResult.results[index];
+          return {
+            ...resource,
+            url_validated: resultItem.isValid
+          };
+        });
+
+        const validResources = validatedResources.filter((r: Resource & { url_validated: boolean }) => r.url_validated);
+
+        // If we have at least one valid resource, return it along with basic fallbacks
+        if (validResources.length > 0) {
+          console.log(`Found ${validResources.length} valid AI-generated resources for topic: ${topicTitle}`);
+          
+          // Generate basic fallback resources to fill remaining slots
+          const remainingSlots = 4 - validResources.length;
+          const basicFallbacks = generateBasicFallbacks(topicTitle, remainingSlots);
+          
+          // Combine valid AI resources with basic fallbacks
+          return [...validResources, ...basicFallbacks];
+        }
+
+        // If we don't have any valid resources, try again
+        console.log(`No valid resources found, trying again...`);
+
+      } catch (error) {
+        console.error(`Error in attempt ${attempts}:`, error);
+        // Continue to next attempt
+      }
+    }
+
+    // If we've exhausted all attempts, use the basic fallback resources
+    console.log(`Failed to generate valid resources after ${MAX_ATTEMPTS} attempts, using basic fallbacks`);
+    return generateBasicFallbacks(topicTitle, 4);
+  }
+
+  // Helper function to generate basic fallback resources
+  function generateBasicFallbacks(topicTitle: string, count: number): Resource[] {
+    const fallbacks = [
+      {
+        id: generateUUID(),
+        title: `${topicTitle} Tutorial`,
+        url: `https://www.youtube.com/results?search_query=${encodeURIComponent(topicTitle)}+tutorial`,
+        type: 'tutorial' as const,
+        format: 'video' as const,
+        isFree: true,
+        topicId: 'fallback',
+        description: `YouTube tutorial for ${topicTitle}`,
+      },
+      {
+        id: generateUUID(),
+        title: `${topicTitle} Documentation`,
+        url: `https://www.google.com/search?q=${encodeURIComponent(topicTitle)}+documentation`,
+        type: 'reference' as const,
+        format: 'article' as const,
+        isFree: true,
+        topicId: 'fallback',
+        description: `Documentation for ${topicTitle}`,
+      },
+      {
+        id: generateUUID(),
+        title: `${topicTitle} GitHub Projects`,
+        url: `https://github.com/topics/${encodeURIComponent(topicTitle.toLowerCase())}`,
+        type: 'project' as const,
+        format: 'article' as const,
+        isFree: true,
+        topicId: 'fallback',
+        description: `GitHub projects for ${topicTitle}`,
+      },
+      {
+        id: generateUUID(),
+        title: `${topicTitle} Online Course`,
+        url: `https://www.coursera.org/search?query=${encodeURIComponent(topicTitle)}`,
+        type: 'course' as const,
+        format: 'article' as const,
+        isFree: false,
+        topicId: 'fallback',
+        description: `Online course for ${topicTitle}`,
+      },
+    ];
+
+    // Return only the requested number of fallbacks
+    return fallbacks.slice(0, count);
   }
 
   // Update the database with new topics and resources
