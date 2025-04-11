@@ -56,206 +56,201 @@ function extractYoutubeVideoId(url: string): string | null {
 
 // Helper function to validate a YouTube video using the API
 async function validateYoutubeVideo(videoId: string): Promise<{ isValid: boolean, error?: string }> {
+  console.log(`Validating YouTube video ID: ${videoId}`);
   // First check if it's in our known bad list
   if (knownBadYoutubeIDs.includes(videoId)) {
+    console.log(`Video ID ${videoId} found in known bad list.`);
     return { isValid: false, error: 'Known unavailable YouTube video' };
   }
   
+  // Check if API key is configured
+  if (!process.env.YOUTUBE_API_KEY) {
+    console.warn('YOUTUBE_API_KEY is not configured. Cannot perform YouTube API validation.');
+    // Return invalid if we cannot check, to avoid showing potentially bad links
+    return { isValid: false, error: 'YouTube API validation skipped (no API key)' }; 
+  }
+  
   try {
-    // If we have YouTube API key, use it for validation
-    if (!process.env.YOUTUBE_API_KEY) {
-      return { isValid: true }; // Default to valid if we can't check
-    }
-    
     const response = await youtube.videos.list({
       id: [videoId],
-      part: ['status', 'snippet'],
+      part: ['status', 'snippet'], // Request status and snippet parts
     });
 
-    // Check if video exists and is available
+    // Check if video exists
     if (!response.data.items || response.data.items.length === 0) {
+      console.log(`YouTube API: Video ID ${videoId} not found.`);
       return { isValid: false, error: 'Video not found' };
     }
 
     const video = response.data.items[0];
-    
-    // Check if video is public
-    if (video.status?.privacyStatus !== 'public') {
-      return { isValid: false, error: `Video is ${video.status?.privacyStatus}` };
-    }
+    const status = video.status;
+    console.log(`YouTube API Response for ${videoId}:`, JSON.stringify(status));
 
+    // Check upload status - must be processed
+    if (status?.uploadStatus !== 'processed') {
+         console.log(`YouTube API: Video ID ${videoId} has invalid upload status: ${status?.uploadStatus}`);
+         return { isValid: false, error: `Video status is ${status?.uploadStatus}` };
+    }
+    
+    // Check privacy status - must be public
+    if (status?.privacyStatus !== 'public') {
+      console.log(`YouTube API: Video ID ${videoId} has invalid privacy status: ${status?.privacyStatus}`);
+      return { isValid: false, error: `Video is ${status?.privacyStatus}` };
+    }
+    
+    // Optional: Check embeddable status if needed (usually public videos are embeddable)
+    // if (!status?.embeddable) {
+    //   console.log(`YouTube API: Video ID ${videoId} is not embeddable.`);
+    //   return { isValid: false, error: 'Video not embeddable' };
+    // }
+
+    console.log(`YouTube API: Video ID ${videoId} validation successful.`);
     return { isValid: true };
-  } catch (error) {
-    console.error('Error validating YouTube video:', error);
-    return { isValid: false, error: 'Failed to validate YouTube video' };
+    
+  } catch (error: any) {
+    // Log more detailed API errors if possible
+    let errorMessage = 'Failed to validate YouTube video';
+    if (error.response && error.response.data && error.response.data.error) {
+        const apiError = error.response.data.error;
+        errorMessage = `YouTube API Error: ${apiError.code} ${apiError.message}`;
+        if (apiError.errors && apiError.errors.length > 0) {
+           errorMessage += ` Reason: ${apiError.errors[0].reason}`;
+        }
+        console.error('Detailed YouTube API Error:', JSON.stringify(apiError));
+    } else {
+        console.error('Error validating YouTube video:', error.message);
+    }
+    return { isValid: false, error: errorMessage };
   }
 }
 
 // Validate a single URL and return detailed results
 async function validateSingleUrl(url: string): Promise<ValidationResponse> {
-  try {
-    // Check cache first
-    const cachedResult = validationCache.get(url);
-    if (cachedResult && (Date.now() - cachedResult.timestamp < CACHE_EXPIRY)) {
-      console.log(`Using cached validation result for ${url}`);
-      return cachedResult.result;
-    }
+  const MAX_RETRIES = 2; // Initial attempt + 1 retry
+  let attempts = 0;
 
-    let validUrl = url;
-    
-    // Make sure URL has a protocol
-    if (!validUrl.startsWith('http://') && !validUrl.startsWith('https://')) {
-      validUrl = 'https://' + validUrl;
-    }
+  // Check cache first
+  const cachedResult = validationCache.get(url);
+  if (cachedResult && (Date.now() - cachedResult.timestamp < CACHE_EXPIRY)) {
+    console.log(`Using cached validation result for ${url}`);
+    return cachedResult.result;
+  }
 
-    // Create validation response object
-    const validationResult: ValidationResponse = {
-      url: validUrl,
-      isValid: false,
-      validatedAt: new Date().toISOString(),
-      details: {}
-    };
+  let validUrl = url;
+  // Make sure URL has a protocol
+  if (!validUrl.startsWith('http://') && !validUrl.startsWith('https://')) {
+    validUrl = 'https://' + validUrl;
+  }
 
-    // Immediately reject known bad URLs
-    if (knownInvalidUrls.includes(validUrl)) {
+  // Create validation response object
+  const validationResult: ValidationResponse = {
+    url: validUrl,
+    isValid: false,
+    validatedAt: new Date().toISOString(),
+    details: {}
+  };
+
+  // Immediately reject known bad URLs
+  if (knownInvalidUrls.includes(validUrl)) {
+    validationResult.isValid = false;
+    validationResult.statusCode = 404; // Assume 404 for known bad
+    validationResult.error = 'Known broken link';
+    validationCache.set(url, { result: validationResult, timestamp: Date.now() });
+    return validationResult;
+  }
+
+  // Special handling for YouTube URLs
+  const isYouTubeUrl = validUrl.includes('youtube.com') || validUrl.includes('youtu.be');
+  if (isYouTubeUrl) {
+    validationResult.details!.isYouTube = true;
+    const videoId = extractYoutubeVideoId(validUrl);
+    if (videoId) {
+      const youtubeValidation = await validateYoutubeVideo(videoId);
+      validationResult.isValid = youtubeValidation.isValid;
+      validationResult.details!.isVideoAvailable = youtubeValidation.isValid;
+      if (!youtubeValidation.isValid) {
+        validationResult.error = youtubeValidation.error || 'YouTube video validation failed';
+        validationResult.statusCode = 404; // Assume 404 if validation fails
+      } else {
+        // Assume 200 if YouTube validation passes, though we don't have the exact code
+        validationResult.statusCode = 200;
+      }
+      validationCache.set(url, { result: validationResult, timestamp: Date.now() });
+      return validationResult;
+    } else {
+      // If we can't extract a video ID from a YouTube URL, mark as invalid
       validationResult.isValid = false;
-      validationResult.statusCode = 404;
-      validationResult.error = 'Known broken link';
-      
-      // Cache result
-      validationCache.set(url, { 
-        result: validationResult, 
-        timestamp: Date.now() 
-      });
-      
+      validationResult.error = 'Could not extract YouTube video ID';
+      validationResult.statusCode = 400; // Bad request essentially
+      validationCache.set(url, { result: validationResult, timestamp: Date.now() });
       return validationResult;
     }
+  }
 
-    // Special handling for YouTube URLs
-    const isYouTubeUrl = validUrl.includes('youtube.com') || validUrl.includes('youtu.be');
-    if (isYouTubeUrl) {
-      validationResult.details!.isYouTube = true;
-      
-      // Check for specific known broken YouTube videos
-      const knownBrokenVideos = ['xfqh5MTb0SU'];
-      
-      // Extract video ID
-      let videoId = '';
-      if (validUrl.includes('youtube.com/watch')) {
-        const urlObj = new URL(validUrl);
-        videoId = urlObj.searchParams.get('v') || '';
-      } else if (validUrl.includes('youtu.be/')) {
-        videoId = validUrl.split('youtu.be/')[1]?.split('?')[0] || '';
-      }
-      
-      // Check if video ID is in our list of known broken videos
-      if (knownBrokenVideos.includes(videoId)) {
-        validationResult.isValid = false;
-        validationResult.error = 'Known unavailable YouTube video';
-        validationResult.details!.isVideoAvailable = false;
-        
-        // Cache result
-        validationCache.set(url, { 
-          result: validationResult, 
-          timestamp: Date.now() 
-        });
-        
-        return validationResult;
-      }
-      
-      // Extract video ID and validate with YouTube API
-      const videoId2 = extractYoutubeVideoId(validUrl);
-      if (videoId2) {
-        const youtubeValidation = await validateYoutubeVideo(videoId2);
-        validationResult.isValid = youtubeValidation.isValid;
-        validationResult.details!.isVideoAvailable = youtubeValidation.isValid;
-        
-        if (!youtubeValidation.isValid) {
-          validationResult.error = youtubeValidation.error;
-        }
-        
-        // Cache result
-        validationCache.set(url, { 
-          result: validationResult, 
-          timestamp: Date.now() 
-        });
-        
-        return validationResult;
-      }
-    }
-
-    // For all other URLs, make an HTTP request to check the status
+  // For all other URLs, make HTTP GET requests with retries
+  while (attempts < MAX_RETRIES) {
+    attempts++;
     const controller = new AbortController();
-    const timeout = setTimeout(() => controller.abort(), 10000); // 10-second timeout
-    
+    const timeout = setTimeout(() => controller.abort(), 15000); // 15-second timeout per attempt
+
     try {
-      // Use HEAD request first for efficiency
-      const headResponse = await fetch(validUrl, {
-        method: 'HEAD',
+      const response = await fetch(validUrl, {
+        method: 'GET', // Use GET by default
         redirect: 'follow',
         signal: controller.signal,
         headers: {
-          'User-Agent': 'Mozilla/5.0 (compatible; SkillCoach/1.0; +https://skillcoach.dev)'
+          'User-Agent': 'Mozilla/5.0 (compatible; SkillCoach/1.0; +https://skillcoach.dev)',
+           // Try to prevent getting blocked
+          'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,image/webp,*/*;q=0.8',
+          'Accept-Language': 'en-US,en;q=0.5',
+          'Connection': 'keep-alive',
+          'Upgrade-Insecure-Requests': '1',
         }
       });
 
       clearTimeout(timeout);
-      
-      // Store status code
-      validationResult.statusCode = headResponse.status;
-      
-      // Check if URL is valid based on status code
-      validationResult.isValid = headResponse.ok;
-      
-      // Get content type
-      const contentType = headResponse.headers.get('content-type');
+
+      validationResult.statusCode = response.status;
+      validationResult.isValid = response.ok; // Status code 200-299
+
+      const contentType = response.headers.get('content-type');
       if (contentType) {
         validationResult.details!.contentType = contentType;
       }
-      
-      // Check for redirects
-      if (headResponse.redirected) {
-        validationResult.details!.redirectUrl = headResponse.url;
+      if (response.redirected) {
+        validationResult.details!.redirectUrl = response.url;
       }
-      
-      // For 403 responses (e.g., sites that block HEAD requests), try a GET request
-      if (headResponse.status === 403) {
-        const getResponse = await fetch(validUrl, {
-          method: 'GET',
-          redirect: 'follow',
-          signal: controller.signal,
-          headers: {
-            'User-Agent': 'Mozilla/5.0 (compatible; SkillCoach/1.0; +https://skillcoach.dev)'
-          }
-        });
-        
-        validationResult.statusCode = getResponse.status;
-        validationResult.isValid = getResponse.ok;
+      if (!response.ok) {
+         validationResult.error = `HTTP status code ${response.status}`;
       }
+
+      // If successful (even if status code is not ok), break retry loop
+      break; 
+
     } catch (error) {
       clearTimeout(timeout);
+      validationResult.isValid = false; // Ensure isValid is false on error
       
-      // Handle fetch errors
-      validationResult.isValid = false;
-      validationResult.error = error instanceof Error ? error.message : 'Failed to fetch URL';
+      if (error instanceof Error) {
+         validationResult.error = `Fetch error (Attempt ${attempts}): ${error.name} - ${error.message}`;
+         // If it's the last attempt or not a retryable error, break
+         if (attempts >= MAX_RETRIES || (error.name !== 'AbortError' && error.name !== 'FetchError')) { // AbortError for timeout, FetchError for network issues
+           break;
+         }
+         // Wait a bit before retrying for transient issues
+         console.log(`Retrying URL: ${validUrl} (Attempt ${attempts}) due to ${error.name}`);
+         await new Promise(resolve => setTimeout(resolve, 500)); // 500ms delay
+      } else {
+         validationResult.error = `Unknown fetch error (Attempt ${attempts})`;
+         break; // Don't retry unknown errors
+      }
     }
-
-    // Cache the result
-    validationCache.set(url, { 
-      result: validationResult, 
-      timestamp: Date.now() 
-    });
-
-    return validationResult;
-  } catch (error) {
-    // Handle overall errors
-    return {
-      url,
-      isValid: false,
-      validatedAt: new Date().toISOString(),
-      error: error instanceof Error ? error.message : 'Unknown error'
-    };
   }
+
+  // Cache the final result after all attempts
+  validationCache.set(url, { result: validationResult, timestamp: Date.now() });
+
+  return validationResult;
 }
 
 export async function POST(req: Request) {
